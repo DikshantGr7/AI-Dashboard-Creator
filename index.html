@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PyDash Analytics</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Plotly for Charting -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <!-- Sortable for Dashboard Drag & Drop -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* PDF Export Styles */
+        @media print {
+            body * { visibility: hidden; }
+            #dashboard-page, #dashboard-page * { visibility: visible; }
+            #dashboard-page { 
+                position: absolute; 
+                left: 0; 
+                top: 0; 
+                width: 100%; 
+                /* Force print layout into a single column */
+                display: block; 
+                margin: 0;
+            }
+            .no-print { display: none !important; }
+            .chart-card { break-inside: avoid; border: 1px solid #ddd; box-shadow: none; margin-bottom: 1rem; }
+            #dashboard-grid { display: block !important; }
+        }
+        /* General styles */
+        .page-section { min-height: calc(100vh - 80px); }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .drag-handle { cursor: grab; }
+
+        /* Custom scrollbar for better appearance */
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-gray-50 text-slate-800 font-sans h-screen flex flex-col overflow-hidden">
+
+    <!-- === PAGE 1: LOGIN (Remains the same) === -->
+    <div id="login-page" class="page-section absolute inset-0 z-50 bg-gray-100 flex items-center justify-center">
+        <div class="bg-white p-10 rounded-2xl shadow-2xl w-96 border-t-4 border-blue-600 fade-in">
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-chart-pie text-3xl"></i>
+                </div>
+                <h2 class="text-3xl font-bold text-gray-800">Welcome</h2>
+                <p class="text-gray-500 text-sm">Sign in to PyDash Creator</p>
+            </div>
+            <form onsubmit="event.preventDefault(); handleLogin();">
+                <div class="mb-4">
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Email Address</label>
+                    <input type="email" id="email" class="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="analyst@company.com" value="demo@user.com">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Password</label>
+                    <input type="password" id="password" class="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="••••••••" value="password">
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition shadow-lg hover:shadow-xl transform hover:-translate-y-0.5" id="login-button">
+                    Access Dashboard
+                </button>
+            </form>
+            <p class="text-xs text-center text-gray-400 mt-6">Backend: FastAPI + 3 ML Models | AI: Mock Groq (Requires running Python server)</p>
+        </div>
+    </div>
+
+    <!-- === APP NAVIGATION (Visible on Pages 2, 3, 4) === -->
+    <div id="app-nav" class="hidden bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="bg-blue-600 text-white w-8 h-8 rounded flex items-center justify-center shadow-sm">
+                <i class="fas fa-layer-group"></i>
+            </div>
+            <h1 class="text-xl font-bold tracking-tight text-gray-800">PyDash<span class="text-blue-600">.ai</span></h1>
+        </div>
+        
+        <!-- Page Tabs (Updated to include Prediction) -->
+        <div class="flex bg-gray-100 p-1 rounded-lg gap-1">
+            <button onclick="showPage('upload-page')" id="nav-upload" class="nav-item px-4 py-2 rounded-md text-sm font-semibold text-gray-500 hover:text-gray-700 transition flex items-center gap-2">
+                <i class="fas fa-upload"></i> 1. Upload
+            </button>
+            <button onclick="showPage('config-page')" id="nav-config" class="nav-item px-4 py-2 rounded-md text-sm font-semibold text-gray-500 hover:text-gray-700 transition flex items-center gap-2">
+                <i class="fas fa-sliders-h"></i> 2. Analysis
+            </button>
+            <button onclick="showPage('dashboard-page')" id="nav-dash" class="nav-item px-4 py-2 rounded-md text-sm font-semibold text-gray-500 hover:text-gray-700 transition flex items-center gap-2">
+                <i class="fas fa-th-large"></i> 3. Dashboard
+            </button>
+            <button onclick="showPage('prediction-page')" id="nav-predict" class="nav-item px-4 py-2 rounded-md text-sm font-semibold text-gray-500 hover:text-gray-700 transition flex items-center gap-2">
+                <i class="fas fa-chart-line"></i> 4. Predict
+            </button>
+        </div>
+
+        <button onclick="logout()" class="text-gray-400 hover:text-red-500 transition"><i class="fas fa-power-off"></i></button>
+    </div>
+
+    <!-- === MAIN CONTENT AREA === -->
+    <div id="main-content" class="hidden flex-1 overflow-hidden bg-slate-50 relative">
+
+        <!-- === PAGE 2: UPLOAD (Remains the same) === -->
+        <div id="upload-page" class="page-section absolute inset-0 flex flex-col items-center justify-center p-8 fade-in">
+            <div class="w-full max-w-2xl">
+                <div class="bg-white border-2 border-dashed border-blue-200 rounded-3xl p-12 text-center hover:border-blue-500 hover:bg-blue-50 transition cursor-pointer relative group">
+                    <input type="file" id="fileInput" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" accept=".csv,.json" onchange="handleFileUpload()">
+                    <div class="w-20 h-20 bg-blue-100 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition duration-300">
+                        <i class="fas fa-cloud-upload-alt text-3xl"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold text-gray-800 mb-2">Upload Dataset</h2>
+                    <p class="text-gray-500 mb-6">Drag and drop your CSV or JSON file here to begin analysis.</p>
+                    <span class="inline-block bg-blue-600 text-white px-6 py-2 rounded-full text-sm font-bold shadow-md">Browse Files</span>
+                </div>
+                
+                <!-- Status Indicator -->
+                <div id="upload-status" class="mt-6 text-center h-8 font-medium text-gray-600"></div>
+            </div>
+        </div>
+
+        <!-- === PAGE 3: ANALYSIS BUILDER (Chart Creation, remains the same) === -->
+        <div id="config-page" class="page-section hidden absolute inset-0 p-6 flex gap-6">
+            
+            <!-- Sidebar Controls -->
+            <div class="w-96 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col h-full overflow-hidden shrink-0">
+                <div class="p-5 border-b border-gray-100 bg-gray-50">
+                    <h3 class="font-bold text-gray-700"><i class="fas fa-cog mr-2"></i>Chart Settings</h3>
+                </div>
+                
+                <div class="p-5 flex-1 overflow-y-auto space-y-5 custom-scrollbar">
+                    <div>
+                        <label class="text-xs font-bold text-gray-400 uppercase block mb-1">Chart Title</label>
+                        <input type="text" id="chartTitle" class="w-full bg-gray-50 border border-gray-200 rounded p-2 text-sm focus:border-blue-500 outline-none" placeholder="e.g., Q1 Revenue Analysis">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-xs font-bold text-gray-400 uppercase block mb-1">Chart Type</label>
+                            <select id="chartType" class="w-full bg-white border border-gray-200 rounded p-2 text-sm focus:border-blue-500 outline-none">
+                                <option value="bar">Bar</option>
+                                <option value="line">Line</option>
+                                <option value="scatter">Scatter</option>
+                                <option value="pie">Pie</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-gray-400 uppercase block mb-1">Aggregation</label>
+                            <select id="algoType" class="w-full bg-white border border-gray-200 rounded p-2 text-sm focus:border-blue-500 outline-none">
+                                <option value="sum">Sum</option>
+                                <option value="mean">Average</option>
+                                <option value="count">Count</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="column-selector-section" class="space-y-3">
+                        <!-- Column Selectors will be populated here -->
+                    </div>
+
+                    <div class="pt-4 border-t border-gray-100">
+                        <button onclick="createChart()" class="w-full bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700 transition shadow-md" id="create-chart-btn">
+                            <i class="fas fa-chart-area mr-2"></i>Generate Chart
+                        </button>
+                    </div>
+
+                    <!-- AI Insight Section -->
+                    <div class="bg-blue-50 p-4 rounded-xl border border-blue-200 mt-6 space-y-3">
+                        <h4 class="font-bold text-blue-800 flex items-center"><i class="fas fa-robot mr-2"></i>AI Data Insights</h4>
+                        <textarea id="ai-context" class="w-full bg-white border border-gray-200 rounded p-2 text-sm outline-none resize-none" rows="3" placeholder="Ask for insights on the current chart, e.g., 'Analyze the top 3 product categories'"></textarea>
+                        <button onclick="getAiFeedback()" class="w-full bg-blue-700 text-white py-1.5 rounded-lg text-sm font-semibold hover:bg-blue-800 transition shadow-sm" id="ai-feedback-btn">
+                            Get Feedback
+                        </button>
+                        <div id="ai-feedback-output" class="text-sm text-blue-900 mt-2 p-2 bg-blue-100 rounded hidden"></div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Chart & Dashboard Preview -->
+            <div class="flex-1 flex flex-col h-full overflow-hidden">
+                <div class="bg-white rounded-2xl shadow-xl p-6 h-full flex flex-col border border-gray-200">
+                    <h3 class="font-bold text-gray-700 border-b border-gray-100 pb-3 mb-4 flex justify-between items-center">
+                        <span class="flex items-center"><i class="fas fa-chart-bar mr-2"></i>Chart Preview</span>
+                        <button onclick="addToDashboard()" class="bg-green-500 text-white text-xs px-3 py-1.5 rounded-full font-semibold hover:bg-green-600 transition shadow-md">
+                            <i class="fas fa-plus mr-1"></i> Add to Dashboard
+                        </button>
+                    </h3>
+                    <div id="chart-preview" class="flex-1 min-h-0">
+                        <div class="flex items-center justify-center h-full text-gray-400 text-lg border border-dashed border-gray-200 rounded-lg">
+                            Chart will appear here after generation.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- === PAGE 4: DASHBOARD (Drag & Drop, remains the same) === -->
+        <div id="dashboard-page" class="page-section hidden absolute inset-0 p-6 flex flex-col">
+            <div class="bg-white rounded-2xl shadow-xl p-6 mb-4 flex justify-between items-center border border-gray-200 no-print">
+                <h2 class="text-2xl font-bold text-gray-700 flex items-center"><i class="fas fa-tachometer-alt mr-3"></i>Analytics Dashboard</h2>
+                <button onclick="window.print()" class="bg-red-500 text-white text-sm px-4 py-2 rounded-lg font-semibold hover:bg-red-600 transition shadow-md">
+                    <i class="fas fa-file-pdf mr-2"></i>Export as PDF
+                </button>
+            </div>
+            <div id="dashboard-grid" class="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 content-start overflow-y-auto custom-scrollbar">
+                <!-- Charts will be dynamically added here -->
+                <div class="text-center p-8 text-gray-500 border border-dashed border-gray-300 rounded-xl col-span-full">
+                    No charts added yet. Generate charts on the 'Analysis' page and click 'Add to Dashboard'.
+                </div>
+            </div>
+        </div>
+        
+        <!-- === PAGE 5: PREDICTION (New Page) === -->
+        <div id="prediction-page" class="page-section hidden absolute inset-0 p-6 flex items-center justify-center fade-in">
+            <div class="w-full max-w-4xl bg-white rounded-2xl shadow-xl p-8 border-t-4 border-green-600">
+                <h2 class="text-2xl font-bold text-gray-700 mb-6 flex items-center">
+                    <i class="fas fa-chart-line mr-3 text-green-600"></i>Sales Prediction Engine
+                </h2>
+                <p class="text-gray-500 mb-6">Use one of the three trained models to predict the total sales for a potential order. *The current date/day-of-year is automatically factored in.*</p>
+                
+                <form onsubmit="event.preventDefault(); handlePrediction();" class="space-y-6">
+                    <!-- Model Selection -->
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Select Prediction Model</label>
+                        <select id="predictionModel" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white">
+                            <option value="XGBoost">XGBoost Regressor (Typically Highest Accuracy)</option>
+                            <option value="RandomForest">Random Forest Regressor (Robust, Tree-based)</option>
+                            <option value="LinearRegression">Linear Regression (Fastest, Highly Interpretable)</option>
+                        </select>
+                        <p class="text-xs text-gray-400 mt-1">Choose the algorithm trained in `models.py`.</p>
+                    </div>
+
+                    <!-- Feature Inputs -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Product Category</label>
+                            <select id="inputCategory" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white">
+                                <option value="Electronics">Electronics</option>
+                                <option value="Home & Kitchen">Home & Kitchen</option>
+                                <option value="Clothing">Clothing</option>
+                                <option value="Beauty">Beauty</option>
+                                <option value="Books">Books</option>
+                            </select>
+                            <p class="text-xs text-gray-400 mt-1">Select the category of the item.</p>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Quantity</label>
+                            <input type="number" id="inputQuantity" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none" min="1" value="2">
+                            <p class="text-xs text-gray-400 mt-1">Number of units in the order.</p>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Unit Price (INR)</label>
+                            <input type="number" id="inputUnitPrice" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none" min="100" step="0.01" value="35000.50">
+                            <p class="text-xs text-gray-400 mt-1">Price per unit.</p>
+                        </div>
+                    </div>
+
+                    <!-- Prediction Button -->
+                    <button type="submit" class="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition shadow-lg transform hover:-translate-y-0.5" id="prediction-btn">
+                        <i class="fas fa-calculator mr-2"></i>Calculate Predicted Sales
+                    </button>
+                </form>
+
+                <!-- Prediction Output -->
+                <div id="prediction-output" class="mt-8 p-6 bg-green-50 rounded-xl border border-green-200 hidden">
+                    <h3 class="text-lg font-bold text-green-800 mb-2">Prediction Result</h3>
+                    <p class="text-sm text-green-700" id="prediction-model-used"></p>
+                    <p class="text-4xl font-extrabold text-green-900 mt-3" id="prediction-value"></p>
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+
+    <!-- === JAVASCRIPT LOGIC === -->
+    <script>
+        const API_BASE_URL = "http://localhost:8000"; // Assuming FastAPI server is running here
+
+        let currentUserId = null;
+        let currentFilename = null;
+        let allColumns = [];
+        let dashboardCharts = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize Sortable for the dashboard
+            const dashboardGrid = document.getElementById('dashboard-grid');
+            if (dashboardGrid) {
+                new Sortable(dashboardGrid, {
+                    animation: 150,
+                    handle: '.drag-handle',
+                    ghostClass: 'bg-blue-100',
+                    chosenClass: 'bg-blue-200',
+                    dragClass: 'opacity-75',
+                });
+            }
+            showPage('login-page'); // Start on the login page
+        });
+        
+        // --- Core Navigation ---
+        function showPage(pageId) {
+            document.querySelectorAll('.page-section').forEach(page => page.style.display = 'none');
+            document.getElementById(pageId).style.display = 'flex';
+
+            document.querySelectorAll('.nav-item').forEach(btn => {
+                btn.classList.remove('bg-white', 'shadow-sm', 'text-blue-600');
+                btn.classList.add('text-gray-500');
+            });
+            const navBtn = document.getElementById(`nav-${pageId.replace('-page', '')}`);
+            if (navBtn) {
+                navBtn.classList.add('bg-white', 'shadow-sm', 'text-blue-600');
+                navBtn.classList.remove('text-gray-500');
+            }
+            if (pageId !== 'login-page') {
+                document.getElementById('main-content').classList.remove('hidden');
+                document.getElementById('app-nav').classList.remove('hidden');
+            }
+        }
+
+        // --- Utility Functions ---
+        async function fetchWithExponentialBackoff(url, options, maxRetries = 5) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status === 429 && i < maxRetries - 1) {
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue; 
+                    }
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ detail: 'Unknown error occurred.' }));
+                        throw new Error(`HTTP error! status: ${response.status}. Detail: ${errorData.detail}`);
+                    }
+                    return response;
+                } catch (error) {
+                    if (i === maxRetries - 1) {
+                        throw error;
+                    }
+                }
+            }
+        }
+
+        function createMessage(message, isError = false) {
+            return `<div class="p-3 mt-4 rounded-lg text-sm font-medium ${isError ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}">
+                ${message}
+            </div>`;
+        }
+
+        // --- Authentication ---
+        async function handleLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('login-button');
+            loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Signing In...';
+            loginBtn.disabled = true;
+
+            try {
+                const response = await fetchWithExponentialBackoff(`${API_BASE_URL}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const result = await response.json();
+                currentUserId = result.user_id;
+                showPage('upload-page');
+            } catch (error) {
+                alert(`Login Failed: ${error.message}`);
+            } finally {
+                loginBtn.innerHTML = 'Access Dashboard';
+                loginBtn.disabled = false;
+            }
+        }
+
+        function logout() {
+            currentUserId = null;
+            currentFilename = null;
+            allColumns = [];
+            dashboardCharts = [];
+            document.getElementById('dashboard-grid').innerHTML = 
+                '<div class="text-center p-8 text-gray-500 border border-dashed border-gray-300 rounded-xl col-span-full">No charts added yet. Generate charts on the \'Analysis\' page and click \'Add to Dashboard\'.</div>';
+            showPage('login-page');
+        }
+
+        // --- Upload Logic ---
+        async function handleFileUpload() {
+            const fileInput = document.getElementById('fileInput');
+            const statusDiv = document.getElementById('upload-status');
+            const file = fileInput.files[0];
+
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('user_id', currentUserId);
+            formData.append('file', file);
+
+            statusDiv.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i>Uploading and parsing file: ${file.name}...`;
+
+            try {
+                const response = await fetchWithExponentialBackoff(`${API_BASE_URL}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                currentFilename = result.filename;
+                allColumns = result.columns;
+                statusDiv.innerHTML = createMessage(`File loaded successfully! ${result.rows} rows detected. Columns: ${allColumns.join(', ')}`);
+                
+                // Automatically move to the next step after successful upload
+                populateColumnSelectors(allColumns);
+                showPage('config-page');
+
+            } catch (error) {
+                statusDiv.innerHTML = createMessage(`Upload Failed: ${error.message}`, true);
+            }
+        }
+
+        // --- Config/Analysis Logic ---
+        function populateColumnSelectors(columns) {
+            const selectorSection = document.getElementById('column-selector-section');
+            selectorSection.innerHTML = `
+                <div>
+                    <label class="text-xs font-bold text-gray-400 uppercase block mb-1">X-Axis (Grouping)</label>
+                    <select id="xAxis" class="w-full bg-white border border-gray-200 rounded p-2 text-sm focus:border-blue-500 outline-none">
+                        <option value="">-- Select Grouping Column --</option>
+                        ${columns.map(col => `<option value="${col}">${col}</option>`).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-400 uppercase block mb-1">Y-Axis (Metric)</label>
+                    <select id="yAxis" class="w-full bg-white border border-gray-200 rounded p-2 text-sm focus:border-blue-500 outline-none">
+                        <option value="">-- Select Metric Column --</option>
+                        ${columns.map(col => `<option value="${col}">${col}</option>`).join('')}
+                    </select>
+                </div>
+            `;
+            // Pre-select mock values for convenience
+            // Note: These selections require the CSV file to be loaded first.
+            document.getElementById('xAxis').value = 'Product_Category';
+            document.getElementById('yAxis').value = 'Total_Sales_INR';
+        }
+
+        
+async function createChart() {
+ const chartBtn=document.getElementById('create-chart-btn');
+ chartBtn.disabled=true;
+ const req={
+  user_id:currentUserId,filename:currentFilename,
+  chart_type:chartType.value,algo_type:algoType.value,
+  x_axis:xAxis.value,y_axis:yAxis.value,
+  title:chartTitle.value||'Chart'
+ };
+ const res=await fetch(`${API_BASE_URL}/create_chart`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(req)});
+ const r=await res.json();
+ const g=JSON.parse(r.graph_json);
+ const div=document.getElementById('chart-preview');
+ div.innerHTML='';
+ Plotly.newPlot(div,g.data,g.layout,{responsive:true,displayModeBar:false});
+ window.lastChartData=g.data;
+ window.lastChartLayout=g.layout;
+ chartBtn.disabled=false;
+}
+
+        
+        async function getAiFeedback() {
+            const aiBtn = document.getElementById('ai-feedback-btn');
+            const aiOutput = document.getElementById('ai-feedback-output');
+            const context = document.getElementById('ai-context').value;
+
+            aiBtn.innerHTML = '<i class="fas fa-robot fa-spin mr-2"></i>Analyzing...';
+            aiBtn.disabled = true;
+            aiOutput.classList.add('hidden');
+
+            const reqBody = {
+                user_id: currentUserId,
+                filename: currentFilename,
+                context: context
+            };
+
+            try {
+                const response = await fetchWithExponentialBackoff(`${API_BASE_URL}/get_ai_feedback`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(reqBody)
+                });
+
+                const result = await response.json();
+                aiOutput.innerHTML = result.feedback;
+                aiOutput.classList.remove('hidden');
+
+            } catch (error) {
+                aiOutput.innerHTML = createMessage(`AI Feedback Failed: ${error.message}`, true);
+                aiOutput.classList.remove('hidden');
+            } finally {
+                aiBtn.innerHTML = 'Get Feedback';
+                aiBtn.disabled = false;
+            }
+        }
+
+        // --- Dashboard Logic ---
+        
+function addToDashboard(){
+ if(!window.lastChartData||!window.lastChartLayout){alert("Generate chart first");return;}
+ const grid=document.getElementById('dashboard-grid');
+ const ph=grid.querySelector('.col-span-full'); if(ph) ph.remove();
+ const id='chart-'+Date.now();
+ const card=document.createElement('div');
+ card.id=id;
+ card.className='chart-card bg-white p-4 rounded-xl shadow-lg border border-gray-200 flex flex-col fade-in';
+ card.innerHTML=`<div class="flex justify-between items-center mb-2 pb-2 border-b border-gray-100">
+ <h4 class="font-bold text-gray-800 text-sm drag-handle flex items-center"><i class="fas fa-arrows-alt text-gray-400 mr-2"></i>${window.lastChartLayout.title?.text||''}</h4>
+ <button onclick="removeChart('${id}')" class="text-red-400 hover:text-red-600 transition"><i class="fas fa-times-circle"></i></button>
+ </div>
+ <div id="chart-container-${id}" class="flex-1 min-h-[200px]"></div>`;
+ grid.appendChild(card);
+ Plotly.newPlot(`chart-container-${id}`,window.lastChartData,{...window.lastChartLayout,title:false,height:250,margin:{l:40,r:20,b:40,t:20}},{responsive:true,displayModeBar:false});
+ showPage('dashboard-page');
+}
+
+
+        function removeChart(chartId) {
+            const chartElement = document.getElementById(chartId);
+            if (chartElement) {
+                chartElement.classList.add('transition', 'duration-300', 'opacity-0', 'scale-90');
+                setTimeout(() => {
+                    chartElement.remove();
+                    const dashboardGrid = document.getElementById('dashboard-grid');
+                    // Add placeholder back if no charts remain
+                    if (dashboardGrid.children.length === 0) {
+                         dashboardGrid.innerHTML = 
+                            '<div class="text-center p-8 text-gray-500 border border-dashed border-gray-300 rounded-xl col-span-full">No charts added yet. Generate charts on the \'Analysis\' page and click \'Add to Dashboard\'.</div>';
+                    }
+                }, 300);
+            }
+        }
+        
+        // --- NEW Prediction Logic ---
+        async function handlePrediction() {
+            const modelName = document.getElementById('predictionModel').value;
+            const quantity = parseInt(document.getElementById('inputQuantity').value);
+            const unitPrice = parseFloat(document.getElementById('inputUnitPrice').value);
+            const category = document.getElementById('inputCategory').value;
+            const predictionBtn = document.getElementById('prediction-btn');
+            const outputDiv = document.getElementById('prediction-output');
+            const outputValue = document.getElementById('prediction-value');
+            const outputModelUsed = document.getElementById('prediction-model-used');
+            
+            // Reset output styling
+            outputDiv.classList.add('hidden');
+            outputDiv.classList.remove('bg-red-50', 'border-red-200');
+            outputDiv.classList.add('bg-green-50', 'border-green-200');
+
+
+            predictionBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Predicting...';
+            predictionBtn.disabled = true;
+
+            if (isNaN(quantity) || isNaN(unitPrice) || quantity <= 0 || unitPrice <= 0 || !category) {
+                // Display error message in the output area instead of an alert
+                outputModelUsed.textContent = 'Input Error';
+                outputValue.textContent = 'Please check your Quantity and Unit Price inputs.';
+                outputDiv.classList.remove('hidden');
+                outputDiv.classList.remove('bg-green-50', 'border-green-200');
+                outputDiv.classList.add('bg-red-50', 'border-red-200');
+
+                predictionBtn.innerHTML = '<i class="fas fa-calculator mr-2"></i>Calculate Predicted Sales';
+                predictionBtn.disabled = false;
+                return;
+            }
+
+            const reqBody = {
+                model_name: modelName,
+                product_category: category,
+                quantity: quantity,
+                unit_price_inr: unitPrice
+            };
+
+            try {
+                const response = await fetchWithExponentialBackoff(`${API_BASE_URL}/predict_sales`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(reqBody)
+                });
+
+                const result = await response.json();
+                
+                outputModelUsed.textContent = `Prediction made by: ${result.model_used}`;
+                outputValue.textContent = `₹ ${result.prediction_inr.toLocaleString('en-IN')}`;
+                outputDiv.classList.remove('hidden');
+
+            } catch (error) {
+                // Display API/Server error message in the output area
+                outputModelUsed.textContent = 'Prediction Failed';
+                outputValue.textContent = error.message;
+                outputDiv.classList.remove('hidden');
+                outputDiv.classList.remove('bg-green-50', 'border-green-200');
+                outputDiv.classList.add('bg-red-50', 'border-red-200');
+            } finally {
+                predictionBtn.innerHTML = '<i class="fas fa-calculator mr-2"></i>Calculate Predicted Sales';
+                predictionBtn.disabled = false;
+            }
+        }
+
+
+    </script>
+</body>
+</html>

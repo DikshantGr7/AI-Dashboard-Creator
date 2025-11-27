@@ -1,0 +1,18 @@
+# Web Framework and Server
+fastapi
+uvicorn[standard]
+
+# Data Science Core
+pandas
+numpy
+scikit-learn
+xgboost
+
+# Visualization
+plotly
+
+# Database
+pymongo
+
+# AI Integration
+google-genai
